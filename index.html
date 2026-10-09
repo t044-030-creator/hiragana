@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ひらがな おぼえ ゲーム</title>
+    <style>
+        body {
+            font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+            text-align: center;
+            background-color: #f0fdf4;
+            margin: 0;
+            padding: 20px;
+            overflow: hidden;
+        }
+        h1 {
+            color: #16a34a;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        #progress {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4b5563;
+            margin-bottom: 15px;
+        }
+        #card-container {
+            perspective: 1000px;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        #card {
+            width: 300px;
+            height: 300px;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+            cursor: pointer;
+        }
+        #card.flipped {
+            transform: rotateY(180deg);
+        }
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 20px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border: 8px solid #bbf7d0;
+        }
+        .card-front {
+            background-color: #ffffff;
+            color: #1e293b;
+            font-size: 72px;
+            font-weight: bold;
+            letter-spacing: 5px;
+        }
+        .card-back {
+            background-color: #fef08a;
+            transform: rotateY(180deg);
+            border-color: #fef08a;
+        }
+        .card-back img {
+            max-width: 80%;
+            max-height: 80%;
+            border-radius: 10px;
+        }
+        .btn {
+            font-size: 22px;
+            font-weight: bold;
+            padding: 12px 30px;
+            margin: 10px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.1s;
+        }
+        .btn:active { transform: scale(0.95); }
+        #flip-btn { background-color: #3b82f6; color: white; }
+        #correct-btn { background-color: #ef4444; color: white; display: none; }
+        
+        /* ゴール画面 */
+        #clear-screen {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(255,255,255,0.95);
+            z-index: 10;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #clear-screen h2 { font-size: 48px; color: #ea580c; margin-bottom: 10px; animation: bounce 1s infinite; }
+        #clear-screen p { font-size: 28px; color: #374151; font-weight: bold; }
+        .medal { font-size: 120px; animation: spin 2s linear infinite; }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        /* 紙吹雪の簡易アニメーション */
+        .confetti {
+            position: absolute; width: 15px; height: 15px; background-color: #f00;
+            animation: fall 3s linear infinite;
+        }
+        @keyframes fall {
+            0% { transform: translateY(-50px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>✨ ひらがな めくり ゲーム ✨</h1>
+    <div id="progress">いま： 1 / 10</div>
+
+    <div id="card-container">
+        <div id="card" onclick="flipCard()">
+            <div class="card-face card-front" id="word-text">いぬ</div>
+            <div class="card-face card-back" id="word-image">🐶</div>
+        </div>
+    </div>
+
+    <div>
+        <button id="flip-btn" class="btn" onclick="flipCard()">うらをみる 🔄</button>
+        <button id="correct-btn" class="btn" onclick="nextCard()">できた！ 💮</button>
+    </div>
+
+    <div id="clear-screen">
+        <div class="medal">🥇</div>
+        <h2>すごーい！かんぺき！</h2>
+        <p>10こ ぜんぶ よめたね！おめでとう！</p>
+        <button class="btn" style="background-color: #10b981; color: white;" onclick="resetGame()">もういちど あそぶ 🎮</button>
+    </div>
+
+    <script>
+        // 10個の単語リスト（文字と、裏面に見せる絵文字）
+        // ※画像ファイルの代わりに、どの端末でも確実に表示される大きめの「絵文字」にしています。
+        const words = [
+            { text: "いぬ", img: "🐶" },
+            { text: "ねこ", img: "🐱" },
+            { text: "くるま", img: "🚗" },
+            { text: "りんご", img: "🍎" },
+            { text: "さかな", img: "🐟" },
+            { text: "ほん", img: "📚" },
+            { text: "とり", img: "🐦" },
+            { text: "ばなな", img: "🍌" },
+            { text: "でんしゃ", img: "🚃" },
+            { text: "ひこうき", img: "✈️" }
+        ];
+
+        let currentIndex = 0;
+        const card = document.getElementById('card');
+        const wordText = document.getElementById('word-text');
+        const wordImage = document.getElementById('word-image');
+        const progress = document.getElementById('progress');
+        const flipBtn = document.getElementById('flip-btn');
+        const correctBtn = document.getElementById('correct-btn');
+        const clearScreen = document.getElementById('clear-screen');
+
+        // Web Audio API を使った効果音再生
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'correct') { // ピーンポーン
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.15); // E5
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+            } else if (type === 'clear') { // ファンファーレ風
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((note, i) => {
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    o.connect(g); g.connect(audioCtx.destination);
+                    o.frequency.value = note;
+                    g.gain.setValueAtTime(0.2, audioCtx.currentTime + i*0.1);
+                    g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + i*0.1 + 0.3);
+                    o.start(audioCtx.currentTime + i*0.1);
+                    o.stop(audioCtx.currentTime + i*0.1 + 0.3);
+                });
+            }
+        }
+
+        // ひらがなの音声読み上げ
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'ja-JP';
+                u.rate = 0.8; // 少しゆっくり
+                window.speechSynthesis.speak(u);
+            }
+        }
+
+        function updateCard() {
+            wordText.textContent = words[currentIndex].text;
+            wordImage.textContent = words[currentIndex].img;
+            wordImage.style.fontSize = "120px";
+            progress.textContent = `いま： ${currentIndex + 1} / 10`;
+            card.classList.remove('flipped');
+            flipBtn.style.display = 'inline-block';
+            correctBtn.style.display = 'none';
+            
+            // カードが変わったら文字を読み上げる
+            setTimeout(() => speak(words[currentIndex].text), 300);
+        }
+
+        function flipCard() {
+            if (!card.classList.contains('flipped')) {
+                card.classList.add('flipped');
+                flipBtn.style.display = 'none';
+                correctBtn.style.display = 'inline-block';
+                // 裏返したときにもう一度声を出す
+                speak(words[currentIndex].text);
+            }
+        }
+
+        function nextCard() {
+            playSound('correct');
+            currentIndex++;
+            if (currentIndex < words.length) {
+                setTimeout(updateCard, 500);
+            } else {
+                setTimeout(showClear, 500);
+            }
+        }
+
+        function showClear() {
+            playSound('clear');
+            clearScreen.style.display = 'flex';
+            makeConfetti();
+            speak("すごーい！かんぺき！10こぜんぶよめたね！おめでとう！");
+        }
+
+        function makeConfetti() {
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.classList.add('confetti');
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.backgroundColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                confetti.style.animationDelay = Math.random() * 2 + 's';
+                confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                clearScreen.appendChild(confetti);
+            }
+        }
+
+        function resetGame() {
+            currentIndex = 0;
+            clearScreen.style.display = 'none';
+            // 古い紙吹雪を消す
+            document.querySelectorAll('.confetti').forEach(el => el.remove());
+            updateCard();
+        }
+
+        // 最初のカードを発動
+        window.onload = () => {
+            // ユーザーが画面を一度触らないと音が出ないブラウザ対策
+            document.body.addEventListener('click', () => {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+            }, { once: true });
+            updateCard();
+        };
+    </script>
+</body>
+</html>
